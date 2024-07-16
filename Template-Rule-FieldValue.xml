@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Rule PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Rule language="beanshell" name="__RULE_NAME__" type="FieldValue">
+  <ReferencedRules>
+    <Reference class="sailpoint.object.Rule" name="__DEPENDENT_RULE_NAME__"/>
+  </ReferencedRules>
+  <Signature returnType="Object">
+	<Inputs>
+      <Argument name="log" type="org.apache.commons.logging.Log">
+        <Description>
+          The log object associated with the SailPointContext.
+        </Description>
+      </Argument>
+      <Argument name="context" type="sailpoint.api.SailPointContext">
+        <Description>
+          A sailpoint.api.SailPointContext object that can be used to query the database if necessary.
+        </Description>
+      </Argument>
+      <Argument name="form">
+        <Description>
+          The Form object for the provisioning plan.
+        </Description>
+      </Argument>
+      <Argument name="field">
+        <Description>
+          The Field object being analyzed.
+        </Description>
+      </Argument>
+    </Inputs>
+    <Returns>
+      <Argument name="value">
+        <Description>
+            Prépare les valeurs des champs du formulaire 
+        </Description>
+      </Argument>
+    </Returns>
+  </Signature>
+  <Source>
+  </Source>
+</Rule>

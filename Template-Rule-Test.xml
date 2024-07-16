@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Rule PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Rule language="beanshell" name="__RULE_NAME__">
+  <Description></Description>
+  <ReferencedRules>
+    <Reference class="sailpoint.object.Rule" name="__DEPENDENT_RULE_NAME__"/>
+  </ReferencedRules>
+  <Source></Source>
+</Rule>
