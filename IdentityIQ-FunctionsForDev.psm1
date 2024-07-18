@@ -10,7 +10,25 @@ function Export-IIQRuleFiles {
         [ValidateNotNullOrEmpty()]
         [string] $OutputDir = $null
     )
+	
+	Write-Debug ""
+	Write-Debug "GÉNERATEUR FICHIERS XML IDENTITY IQ (RULES)" 
+	Write-Debug "-------------------------------------------"
+	Write-Debug ""
+	
+	# Obtient les métadonnées du projet depuis un fichier xml
+	
+	Write-Debug "lit le fichier de métadonnées de projet: iiq-project.xml";
+	Write-Debug ""
+		
+	$project_name = Select-Xml -Path  .\iiq-project.xml -XPath //iiq-project/name | Select -ExpandProperty Node | Select -ExpandProperty '#text';
+
+	if( -not $project_name ) {
+		Write-Error "No projet name found";
+		exit 1
+	}
     
+	$Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($False)
     $liste_rules = @();
     $liste_files = (Get-ChildItem $PathJavaFiles);
 
@@ -19,38 +37,42 @@ function Export-IIQRuleFiles {
         exit 1
     }
 	
-	Write-Debug "$($liste_files.Count) files(s) found";
-	Write-Debug $liste_files.ToString();
-       
-
+	Write-Debug "$($liste_files.Count) fichier(s) retrouvés";
+	Write-Debug ""
+	
     if( -not (Test-Path $OutputDir) ) {
         Write-Error "Invalid output dir: $($OutputDir)"
         exit 1
     }
-
+		
+	
     foreach ($file in ( $liste_files | Select -ExpandProperty FullName)) {
-
-        $lignes = Get-Content $file | Select-String -AllMatches -Pattern 'class[.|\s]([a-zA-Z0-9_]{0,})[\s]{0,}(extends[\s]{1,}([a-zA-Z0-9_]{1,}))?|\/\/[\s]?[Rr]ule[\s]{1,}[Nn]ame:[\s]?([\sa-zA-Z\-0-9\.]{1,})' | Select -ExpandProperty Matches;
+        
+		$lignes = Get-Content $file | Select-String -AllMatches -Pattern 'class[.|\s]([a-zA-Z0-9_]{0,})[\s]{0,}(extends[\s]{1,}([a-zA-Z0-9_]{1,}))?' | Select -ExpandProperty Matches;
         $metadata = $lignes | Select -ExpandProperty Groups | select -ExpandProperty $_.Captures | Where-Object { $_.Value -and -not $_.Value.Contains(' ') } | Select -ExpandProperty Value
-        $rule = @{ File = $file; Type = ""; Name = $metadata[0];  Class = $metadata[1]; Extends = $null };
-        $rule.Type = $metadata[0] | Select-String -AllMatches -Pattern "RQ-Rule\-([a-zA-Z]{1,})\-" | ForEach-Object { return $_.Matches.Groups[1].Value }
-
-        If (-not $metadata[2].Contains("class")) { 
-            $rule.Extends = $metadata[2] ;
-        } 
-    
-        Write-Output $metadata | fl;
-
+        										
+		$rule = @{ File = $file; Type = ""; Name = "";  Class = $null; Extends = $null };
+        		
+		if( $metadata -is [array] ) {
+			$rule.Class = $metadata[0];
+			$rule.Extends = $metadata[1];
+		} else {
+			$rule.Class = $metadata;
+		}
+		
+		$rule.Type = $rule.Class;
+		$rule.Name = "RQ-Rule-$($rule.Type)-$($project_name)";
+     		 
+		
+	 
         $liste_rules += $rule;
 				
     }
-	
-	Write-Debug "$($liste_rules.Count) rule(s) found: $($liste_rules | Select Name)";
 
     foreach( $rule in $liste_rules ) {
         $template_name = [System.IO.Path]::Combine($PSScriptRoot,"Template-Rule-$($rule.Type).xml");
         
-        Write-Debug "generating xml rule from java class $($rule.Class)..."
+        Write-Debug "traitement génération fichier xml pour la classe java $($rule.Class)..."
     
         if(Test-Path $template_name) {
             $xml = [xml](Get-Content $template_name -Encoding UTF8);
@@ -59,13 +81,13 @@ function Export-IIQRuleFiles {
             if($rule.Extends -ne $null) {
                 $parent_rule = $liste_rules | Where-Object Class -eq $rule.Extends;
 
-                Write-Debug "adding library reference: $($parent_rule.Name) ($($rule.Extends) class)"
+                Write-Debug "rajoute référence à la librairie: $($parent_rule.Name) ($($rule.Extends) class)"
                 
                 $xml.SelectSingleNode("//Rule/ReferencedRules/Reference/@name").Value = $parent_rule.Name;
 
             } else {
 
-                Write-Debug "no library reference found";
+                Write-Debug "la classe n'hérite pas d'aucune classe, la référence  de librairie est ignorée";
 
                 $nodeToDelete = $xml.SelectSingleNode("//Rule/ReferencedRules");
                 $nodeToDelete.ParentNode.RemoveChild($nodeToDelete) | Out-Null;
@@ -73,26 +95,42 @@ function Export-IIQRuleFiles {
                         
             $cdataContent = [System.Text.StringBuilder]::New();
                         
-            foreach($line in (Get-IIQFormattedCodeFromJavaFile -Path $rule.File )) {
+            foreach($line in (Get-IIQFormattedCodeFromJavaFile -Path $rule.File -RuleName $rule.Name )) {
                 $cdataContent.AppendLine($line) | Out-Null;
             }
 
-            Write-Debug "$($cdataContent.Length) bytes of code";
+            Write-Debug "$($cdataContent.Length) bytes de code";
 
+			$outputFileName = (Join-Path -Path $OutputDir -ChildPath "$($rule.Name).xml");
             $xml.SelectSingleNode("//Rule/Source").AppendChild($xml.CreateCDataSection($cdataContent.ToString())) | Out-Null;
-            $xml.Save([System.IO.Path]::Combine($OutputDir, "$($rule.Name).xml")) | Out-Null;
-			
-			Write-Debug "$($rule.Name).xml succesfully created ";
+            $xml.Save($outputFileName) | Out-Null;
+									
+			Write-Debug "$($rule.Name).xml créé avec succès ";
             Write-Debug ""
 
         } else {
-            Write-Warning "no template for '$($rule.Type)' xml files"
+            Write-Warning "aucun gabarit (template) pour les rules '$($rule.Type)'"
         }
 
     }
-
-    Write-Output "$($liste_rules.Count) file(s) generated at $($OutputDir)"
-
+	
+	Write-Debug "$($liste_rules.Count) fichier(s) créés dans le répertoire $($OutputDir)";
+	Write-Debug "";
+	
+	Write-Debug "convertir fichiers dans $($OutputDir) au format UTF-8 (Sans BOM)";
+	
+	foreach( $xmlFile in ( Get-ChildItem -Filter *.xml -Path $OutputDir) ) {
+		$lines = Get-Content -Path $xmlFile.FullName;
+		[System.IO.File]::WriteAllLines($xmlFile.FullName, $lines, $Utf8NoBomEncoding);
+		
+		Write-Debug "- fichier $($xmlFile.Name) OK"
+	}
+	    	
+	Write-Debug ""
+	Write-Debug "-------------------------------------------"
+	Write-Debug "TRAITEMENT TERMINÉ :)"
+	
+	return Get-ChildItem temp
 }
 
 
@@ -101,7 +139,10 @@ function Get-IIQFormattedCodeFromJavaFile {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [string] $Path        
+        [string] $Path,
+		
+		[Parameter(Mandatory)]
+		[string] $RuleName
     )
 
     # balises à chercher dans les fichiers java
@@ -111,12 +152,12 @@ function Get-IIQFormattedCodeFromJavaFile {
     $END_BLOCK = '// END BODY'
     $LINES_TO_IGNORE = @('package rules', '@SuppressWarnings')
 
-    Write-Debug "extracting code from java file: $([System.IO.Path]::GetFileName($Path))"
+    Write-Debug "lit du code depuis le fichier java: $([System.IO.Path]::GetFileName($Path))"
 
     $file_contents = $null;
     $func_tab_count = $null;
     $body_tab_count = $null;
-    $fichier_cible = $null;
+    $fichier_cible = "$($RuleName).xml";
     $id_rule = $null;
     
     $within_imports = $true
@@ -131,17 +172,11 @@ function Get-IIQFormattedCodeFromJavaFile {
     foreach($line in Get-Content $Path -Encoding UTF8) {
 
         # Nom fichier généré
-        if($line.ToLower().Contains("// rule name")) {
-            $fichier_cible = $line.Substring($line.IndexOf(':') + 1).Trim();
-            continue;
-        }
-
-        # Identifiant rule
-        if($line.ToLower().Contains("// rule id")) {
-            $id_rule = $line.Substring($line.IndexOf(':') + 1).Trim();
-            continue;
-        }
-
+        #if($line.ToLower().Contains("// rule name")) {
+        #    $fichier_cible = $line.Substring($line.IndexOf(':') + 1).Trim();
+        #    continue;
+        #}
+        
         # Block imports
            
         if($line.Contains("class ")) {
