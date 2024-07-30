@@ -185,7 +185,8 @@ function Get-IIQRuleInfoFromJavaFile {
      
     $lignesDesc = @();           
     $rule = @{ File = $Path; Type = ""; Name = "";  Class = $null; Extends = $null; Id = $null; Description = ""; Package = $null };
-	
+    
+    :outer
     foreach($line in Get-Content $Path) {
             switch -Regex ($line) {
                 "class[\s]{1,}([a-zA-Z0-9_]{0,})[\s]{0,}" {
@@ -203,25 +204,25 @@ function Get-IIQRuleInfoFromJavaFile {
                         $rule.Class = $_.Substring($indexClass).Replace('{',"").Trim();
                     }
 
-                    
-                    Break;
+                    Break outer;
+                                        
                 }
-                "[\s]{0,}\*[\s]{1,}[R|r]ule[\s]{1,}[iI][dD][\s]{0,}:[\s]{0,}[a-zA-Z0-9\s]{1,}" {
+                "[\s]{0,}//[\s]{1,}[R|r]ule[\s]{1,}[iI][dD][\s]{0,}:[\s]{0,}[a-zA-Z0-9\s]{1,}" {
                     # Rule ID
                     $rule.Id = $_.Substring($_.IndexOf(':') + 1).Trim();
                     Break;
                 }
-                "[\s]{0,}\*[\s]{1,}[R|r]ule[\s]{1,}[Nn]ame[\s]{0,}:[\s]{0,}[a-zA-Z0-9\s]{1,}" {
+                "[\s]{0,}//[\s]{1,}[R|r]ule[\s]{1,}[Nn]ame[\s]{0,}:[\s]{0,}[a-zA-Z0-9\s]{1,}" {
                     # Rule Name
                     $rule.Name = $_.Substring($_.IndexOf(':') + 1).Trim();
                     Break;
                 }
-                "[\s]{0,}\*[\s]{1,}[R|r]ule[\s]{1,}[Tt]ype[\s]{0,}:[\s]{0,}[a-zA-Z0-9]{3,}" {
+                "[\s]{0,}//[\s]{1,}[R|r]ule[\s]{1,}[Tt]ype[\s]{0,}:[\s]{0,}[a-zA-Z0-9]{3,}" {
                     # Rule Type
                     $rule.Type = $_.Substring($_.IndexOf(':') + 1).Trim();
                     Break;
                 }
-                "[\s]{0,}\*[\s]{1,}" {
+                "[\s]{0,}//[\s]{1,}" {
                     # Description
                     $lignesDesc += $_.Substring($_.IndexOf('*') +1).Trim();
                     Break;
@@ -230,6 +231,10 @@ function Get-IIQRuleInfoFromJavaFile {
 					$rule.Package = $_.Trim().Replace("package","").Trim().replace(";","");
 					Break;
 				}
+            }
+
+            if( $endOfHeader ) {
+                Break;
             }
         }
 
